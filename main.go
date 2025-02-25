@@ -2,12 +2,13 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -58,15 +59,11 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		// 生成密码hash
-		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			fmt.Printf("密码哈希生成失败: %v\n", err)
-			return
-		}
+		// 生成SHA1密码哈希
+		hash := generateSHA1Hash(password)
 
 		// 组装用户信息
-		entry := fmt.Sprintf("%s:%s\n", username, string(hash))
+		entry := fmt.Sprintf("%s:{SHA}%s\n", username, hash)
 
 		// 追加用户信息到文件
 		f, err := os.OpenFile(htpasswdFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -138,19 +135,15 @@ var editPassCmd = &cobra.Command{
 			return
 		}
 
-		// 生成密码hash
-		hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-		if err != nil {
-			fmt.Printf("密码哈希生成失败: %v\n", err)
-			return
-		}
+		// 生成SHA1密码哈希
+		hash := generateSHA1Hash(newPassword)
 
 		// 更新用户密码
 		var newContent []string
 		userFound := false
 		for _, user := range users {
 			if strings.HasPrefix(user, username+":") {
-				newContent = append(newContent, fmt.Sprintf("%s:%s", username, string(hash)))
+				newContent = append(newContent, fmt.Sprintf("%s:{SHA}%s", username, hash))
 				userFound = true
 			} else {
 				newContent = append(newContent, user)
@@ -171,6 +164,13 @@ var editPassCmd = &cobra.Command{
 
 		fmt.Printf("用户 %s 密码已更新\n", username)
 	},
+}
+
+// 生成SHA1哈希并进行Base64编码
+func generateSHA1Hash(password string) string {
+	hasher := sha1.New()
+	hasher.Write([]byte(password))
+	return base64.StdEncoding.EncodeToString(hasher.Sum(nil))
 }
 
 func readHtpasswdFile() ([]string, error) {
